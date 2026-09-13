@@ -83,8 +83,10 @@
   }
 
   // 行内累积文本 -> 段落（空白折叠、<br> 转换）
+  // 空白集合包含 nbsp 与 BOM（云文档导出常见残留），统一折叠为普通空格
+  var WS_RE = /[ \t\r\n\f\u00a0\ufeff]+/g;
   function composeInline(raw, indent) {
-    var norm = raw.replace(/[ \t\r\n\f ]+/g, ' ');
+    var norm = raw.replace(WS_RE, ' ');
     var lines = norm.split(HARD_BREAK).map(function (l) {
       return protectStart(l.replace(/^ +| +$/g, ''));
     });
@@ -95,7 +97,7 @@
   }
 
   function singleLine(text) {
-    return text.replace(/[ \t\r\n\f ]+/g, ' ').replace(HARD_BREAK, ' ').trim();
+    return text.replace(WS_RE, ' ').replace(HARD_BREAK, ' ').trim();
   }
 
   /* ---------- 行内元素 ---------- */
