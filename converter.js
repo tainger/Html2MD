@@ -142,14 +142,14 @@
 
   function inlineCode(el) {
     var content = el.textContent.replace(/\r\n?/g, '\n');
-    var fence = fenceFor(content);
+    var fence = fenceFor(content, 1);
     var pad = /^`|`$/.test(content) ? ' ' : '';
     return fence + pad + content + pad + fence;
   }
 
-  // 选择比内容中最长反引号串更长的围栏
-  function fenceFor(content) {
-    var max = 2;
+  // 选择比内容中最长反引号串更长的围栏；minLen 区分行内代码(1)与代码块(3)
+  function fenceFor(content, minLen) {
+    var max = (minLen || 1) - 1;
     var runs = content.match(/`+/g);
     if (runs) {
       runs.forEach(function (r) { if (r.length > max) max = r.length; });
@@ -219,7 +219,7 @@
     var holder = codeEl || el;
     var content = holder.textContent.replace(/\r\n?/g, '\n').replace(/\n+$/, '');
     var lang = detectLang(el, codeEl);
-    var fence = fenceFor(content);
+    var fence = fenceFor(content, 3);
     var body = withIndent(content, indent);
     return indent + fence + lang + '\n' + body + '\n' + indent + fence;
   }
@@ -380,6 +380,50 @@
     });
   }
 
+  /* ---------- 围栏状态机：修复源页面正文中的行内三反引号 ----------
+   * 云文档类页面常用 span 样式而非 <code> 表达行内代码，文本节点里直接是
+   * ```code``` 这样的成对三反引号，原样输出会打开未闭合围栏、吞掉后文。
+   * 修复原则（实战总结）：
+   *  1) 先识别围栏标记行（反引号/波浪线 3+ 连写，允许列表缩进与引用前缀）
+   *  2) 闭合围栏要求同字符且长度不小于开围栏——四反引号围栏内的三反引号
+   *     日志原文不会被误判为闭合（也不会被行内替换误伤）
+   *  3) 开/关对称处理：闭合判断不受当前 inFence 短路
+   *  4) 仅在围栏外把“同行成对、等长”的 3+ 反引号收缩为单反引号；
+   *     正文反引号已被转义为 \` 形态，run 定义需兼容可选反斜杠前缀
+   */
+  var FENCE_MARK_RE = /^[ \t]*(?:>+[ \t]*)?(`{3,}|~{3,})/;
+  var INLINE_PAIR_RE = /((?:\\?`){3,})([^\n]+?)\1/g;
+
+  function fixInlineFences(markdown) {
+    var lines = markdown.split('\n');
+    var inFence = false, fenceChar = '', fenceLen = 0;
+    for (var i = 0; i < lines.length; i++) {
+      var m = FENCE_MARK_RE.exec(lines[i]);
+      if (m) {
+        var run = m[1];
+        var ch = run.charAt(0);
+        var len = run.length;
+        if (!inFence) {
+          inFence = true; fenceChar = ch; fenceLen = len; // 开围栏
+        } else if (ch === fenceChar && len >= fenceLen) {
+          inFence = false; fenceChar = ''; fenceLen = 0;   // 闭合
+        }
+        // 围栏内不同字符/长度不足的标记行：属于原文，保持不动
+        continue;
+      }
+      if (!inFence && /(?:\\?`){3,}/.test(lines[i])) {
+        lines[i] = lines[i].replace(INLINE_PAIR_RE, function (all, pairRun, content) {
+          // 转义形态配对（来自正文文本）：代码跨度内的 \X 需还原为 X
+          if (pairRun.indexOf('\\') !== -1) {
+            content = content.replace(/\\([\\`*_~[\]#>])/g, '$1');
+          }
+          return '`' + content + '`';
+        });
+      }
+    }
+    return lines.join('\n');
+  }
+
   /* ---------- 入口 ---------- */
 
   function convert(html, options) {
@@ -396,6 +440,8 @@
       var titleMd = '# ' + singleLine(escapeText(String(options.title)));
       md = md ? titleMd + '\n\n' + md : titleMd;
     }
+
+    md = fixInlineFences(md);
 
     return md
       .replace(/[ \t]+$/gm, '')   // 去掉每行尾部空白（占位符保护硬换行）
