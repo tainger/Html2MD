@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>网页转 Markdown</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="bar">
+    <span class="title">网页转 Markdown</span>
+    <select id="scope" title="转换范围">
+      <option value="auto">自动（选中区域 / 正文）</option>
+      <option value="smart">智能正文</option>
+      <option value="selection">仅选中区域</option>
+      <option value="full">整个网页</option>
+    </select>
+  </header>
+
+  <div class="bar toolbar">
+    <button id="copy" class="primary">复制</button>
+    <button id="download">下载 .md</button>
+    <span id="stats" class="stats"></span>
+  </div>
+
+  <textarea id="output" readonly spellcheck="false"
+    placeholder="正在准备转换…"></textarea>
+
+  <script src="converter.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
